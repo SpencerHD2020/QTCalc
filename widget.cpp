@@ -6,28 +6,6 @@ Widget::Widget(QWidget *parent)
     , ui(new Ui::Widget)
 {
     ui->setupUi(this);
-    /*
-    // ******************************************** Results Frame **********************************************************
-    resFrameSize.hPos = 0;
-    resFrameSize.vPos = 0;
-    resFrameSize.hSize = 500;
-    resFrameSize.vSize = 40;
-    resultsFrame->setGeometry(resFrameSize.hPos, resFrameSize.vPos, resFrameSize.hSize, resFrameSize.vSize);
-    QPalette ResultsFramePallete;
-    ResultsFramePallete.setColor(QPalette::Window, Qt::gray);
-    resultsFrame->setAutoFillBackground(true);
-    resultsFrame->setPalette(ResultsFramePallete);
-    resultsFrame->show();
-    // *********************************************************************************************************************
-    // First Row of buttons - AC  +/-  %  /
-    // ******************************************** AC Button **************************************************************
-    clearBFrameSize.hPos = 0;
-    clearBFrameSize.vPos = (resFrameSize.vPos + 1);
-    clearBFrameSize.hSize = (resFrameSize.hSize / 4);
-    clearBFrameSize.vSize = buttonVSize;
-    //clearButton->setGeometry(clearBFrameSize.hPos)
-    // *********************************************************************************************************************
-    */
     // Connect Keypad Buttons
     connect(this->ui->zeroButton, &QPushButton::clicked, this, [=]() { numericButtonClicked('0'); });
     connect(this->ui->oneButton, &QPushButton::clicked, this, [=]() { numericButtonClicked('1'); });
@@ -39,15 +17,15 @@ Widget::Widget(QWidget *parent)
     connect(this->ui->sevenButton, &QPushButton::clicked, this, [=]() { numericButtonClicked('7'); });
     connect(this->ui->eightButton, &QPushButton::clicked, this, [=]() { numericButtonClicked('8'); });
     connect(this->ui->nineButton, &QPushButton::clicked, this, [=]() { numericButtonClicked('9'); });
-
     // Connect Operation Buttons
     connect(this->ui->plusButton, &QPushButton::clicked, this, [=]() { operatorButtonClicked('+'); });
     connect(this->ui->minusButton, &QPushButton::clicked, this, [=]() { operatorButtonClicked('-'); });
     connect(this->ui->multiplyButton, &QPushButton::clicked, this, [=]() { operatorButtonClicked('*'); });
     connect(this->ui->divisionButton, &QPushButton::clicked, this, [=]() { operatorButtonClicked('/'); });
-
+    // Connect Functor Buttons
     connect(this->ui->calcButton, &QPushButton::clicked, this, &Widget::calcButtonClicked);
     connect(this->ui->clearButton, &QPushButton::clicked, this, &Widget::clearButtonClicked);
+    connect(this->ui->negateButton, &QPushButton::clicked, this, &Widget::negationButtonClicked);
 
 }
 
@@ -99,6 +77,20 @@ void Widget::operatorButtonClicked(char op) {
     else {
         calcError("Widget::operatorButtonClicked => Number Conversion Failure");
     }
+}
+
+void Widget::negationButtonClicked() {
+    // Switch relativity to 0 for current pending entry
+    std::string tempInput {inputBuffer.toStdString()};
+    if (tempInput.find("-") != std::string::npos) {
+        // Number is already negative
+        tempInput = tempInput.erase(0, 1);
+    }
+    else {
+        tempInput = "-" + tempInput;
+    }
+    inputBuffer = QString::fromStdString(tempInput);
+    this->ui->result->setText(inputBuffer);
 }
 
 void Widget::calcButtonClicked() {
@@ -203,11 +195,11 @@ void Widget::calcButtonClicked() {
                         break;
                 }
             }
-            if (DEBUG) {
-                qDebug() << "priorityOperations.indexOf(i) == " << priorityOperations.indexOf(i);
-            }
             else if (priorityOperations.indexOf(i) == -1) {
                 if (i == 0) {
+                    if (DEBUG) {
+                        qDebug() << "This is first operation so finalAnswer will be: " << wholeNumbers[0];
+                    }
                     finalAnswer += wholeNumbers[0];
                 }
                 // Process Operation normally
@@ -219,6 +211,9 @@ void Widget::calcButtonClicked() {
                 // 1- == (2)
                 // 2* == (3)
                 int secondNum {wholeNumbers[(i + 1)]};
+                if (DEBUG) {
+                    qDebug() << "NO UPCOMING PRIORITY!: Going to process as follows: " << finalAnswer << " " << operation << " " << secondNum;
+                }
                 switch (operation) {
                     case '+':
                         finalAnswer += secondNum;
@@ -240,34 +235,3 @@ void Widget::calcButtonClicked() {
         calcError("Widget::calcButtonClicked => Whole Number to operator ratio mismatch");
     }
 }
-
-/*
-void Widget::resizeResultsFrame(int size, int param) {
-    switch (param) {
-        case H_POS:
-            resFrameSize.hPos = size;
-            break;
-        case V_POS:
-            resFrameSize.vPos = size;
-            break;
-        case H_SIZE:
-            resFrameSize.hSize = size;
-            break;
-        case V_SIZE:
-            resFrameSize.vSize = size;
-            break;
-    }
-    resultsFrame->setGeometry(resFrameSize.hPos, resFrameSize.vPos, resFrameSize.hSize, resFrameSize.vSize);
-};
-
-// Handle Window Resizing
-void Widget::resizeEvent(QResizeEvent *e) {
-    resizeResultsFrame(this->size().rwidth(), H_SIZE);
-};
-
-// Specify starting window size for Widget
-QSize Widget::sizeHint() const
-{
-    return QSize(500, 500); // Width, Height
-}
-*/

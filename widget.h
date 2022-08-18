@@ -35,5 +35,6 @@ public slots:
     void calcButtonClicked();
     void clearButtonClicked();
     void operatorButtonClicked(char op);
+    void negationButtonClicked();
 };
 #endif // WIDGET_H
