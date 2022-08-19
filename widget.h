@@ -30,11 +30,14 @@ private:
     void clearCache();
     void calcError(QString failureReason="Fatal Error");
     bool DEBUG {true};
+    bool floatingPointValuesIncluded {false};
 public slots:
     void numericButtonClicked(char num);
     void calcButtonClicked();
     void clearButtonClicked();
     void operatorButtonClicked(char op);
     void negationButtonClicked();
+    void decimalButtonClicked();
+
 };
 #endif // WIDGET_H
