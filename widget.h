@@ -21,16 +21,26 @@ class Widget : public QWidget
 public:
     Widget(QWidget *parent = nullptr);
     ~Widget();
-    QList<int> wholeNumbers;
     QList<double> floatingPointNumbers;
     QList<char> operations;
     QString inputBuffer;
+    struct CastDouble {
+        double num;
+        bool safe;
+        CastDouble(double d, bool b) {
+          this->num = d;
+          this->safe = b;
+        };
+    };
 private:
     Ui::Widget *ui;
     void clearCache();
     void calcError(QString failureReason="Fatal Error");
     bool DEBUG {true};
     bool floatingPointValuesIncluded {false};
+    void updateUI();
+    CastDouble qStringToDouble(QString ref);
+
 public slots:
     void numericButtonClicked(char num);
     void calcButtonClicked();
@@ -38,6 +48,7 @@ public slots:
     void operatorButtonClicked(char op);
     void negationButtonClicked();
     void decimalButtonClicked();
+    void percentageButtonClicked();
 
 };
 #endif // WIDGET_H

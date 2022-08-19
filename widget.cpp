@@ -27,6 +27,7 @@ Widget::Widget(QWidget *parent)
     connect(this->ui->clearButton, &QPushButton::clicked, this, &Widget::clearButtonClicked);
     connect(this->ui->negateButton, &QPushButton::clicked, this, &Widget::negationButtonClicked);
     connect(this->ui->decimalButton, &QPushButton::clicked, this, &Widget::decimalButtonClicked);
+    connect(this->ui->percentageButton, &QPushButton::clicked, this, &Widget::percentageButtonClicked);
 
 }
 
@@ -49,10 +50,9 @@ void Widget::clearButtonClicked() {
 }
 
 void Widget::clearCache() {
-    wholeNumbers.clear();
     floatingPointNumbers.clear();
     operations.clear();
-    floatingPointValuesIncluded = false;
+    inputBuffer = "";
 }
 
 void Widget::calcError(QString failureReason) {
@@ -66,34 +66,16 @@ void Widget::calcError(QString failureReason) {
 
 void Widget::operatorButtonClicked(char op) {
     // Convert Input Buffer to a number
-    bool conversionSuccessful {false};
-    if (floatingPointValuesIncluded) {
-        double curNum {inputBuffer.toDouble(&conversionSuccessful)};
-        if (conversionSuccessful) {
-            floatingPointNumbers.append(curNum);
-            inputBuffer = "";
-            this->ui->result->setText(QString(op));
-            // Add operator to QList
-            operations.append(op);
-        }
-        else {
-            calcError("Widget::operatorButtonClicked => Number Conversion Failure");
-        }
+    Widget::CastDouble castNum {qStringToDouble(inputBuffer)};
+    if (castNum.safe) {
+        floatingPointNumbers.append(castNum.num);
+        inputBuffer = "";
+        // Add operator to QList
+        operations.append(op);
+        this->ui->result->setText(QString(op));
     }
     else {
-        int curNum {inputBuffer.toInt(&conversionSuccessful)};
-        if (conversionSuccessful) {
-            // Add new number to QList
-            wholeNumbers.append(curNum);
-            // Clear Input Buffer and set result text to operator on UI
-            inputBuffer = "";
-            this->ui->result->setText(QString(op));
-            // Add operator to QList
-            operations.append(op);
-        }
-        else {
-            calcError("Widget::operatorButtonClicked => Number Conversion Failure");
-        }
+        calcError("Widget::operatorButtonClicked => Number Conversion Failure");
     }
 }
 
@@ -108,305 +90,199 @@ void Widget::negationButtonClicked() {
         tempInput = "-" + tempInput;
     }
     inputBuffer = QString::fromStdString(tempInput);
-    this->ui->result->setText(inputBuffer);
+    updateUI();
 }
 
 void Widget::decimalButtonClicked() {
-    floatingPointValuesIncluded = true;
     inputBuffer += ".";
-    this->ui->result->setText(inputBuffer);
+    updateUI();
+
+}
+
+void Widget::percentageButtonClicked() {
+    // Just need to divide the input by 100
+    Widget::CastDouble castNum {qStringToDouble(inputBuffer)};
+    if (castNum.safe) {
+        double newNum {castNum.num / 100};
+        inputBuffer = QString::number(newNum);
+        updateUI();
+    }
+    else {
+        calcError("Widget::percentageButtonClicked => Number Conversion Failure");
+    }
+}
+
+Widget::CastDouble Widget::qStringToDouble(QString ref) {
+    bool converted {false};
+    double finalNum {ref.toDouble(&converted)};
+    return Widget::CastDouble(finalNum, converted);
+}
+
+void Widget::updateUI() {
+    // Make look like an int if whole number
+    // Will always have a decimal, need to cast to double to see, also ensure not operator
+    // If operator button was just clicked there will be just as many numbers as operators
+    if (floatingPointNumbers.size() == operations.size()) {
+        // Update is showing operator
+        this->ui->result->setText(inputBuffer);
+        return;
+    }
+    else {
+        // Update is a number
+        bool isInteger {true};
+        std::string tempString {inputBuffer.toStdString()};
+        if (tempString.find(".") != std::string::npos) {
+            tempString.erase(0, tempString.find("."));
+            for (int i {0}; i < tempString.length(); ++i) {
+                char curChar {tempString[i]};
+                if (curChar != '0') {
+                    isInteger = false;
+                    break;
+                }
+            }
+            if (isInteger) {
+                std::string intString {inputBuffer.toStdString()};
+                intString.erase(intString.find("."));
+                this->ui->result->setText(QString::fromStdString(intString));
+                return;
+            }
+        }
+        this->ui->result->setText(inputBuffer);
+    }
 
 }
 
 void Widget::calcButtonClicked() {
     // Convert Input Buffer to a number
-    bool conversionSuccessful {false};
-    if (floatingPointValuesIncluded) {
-        double curNum {inputBuffer.toDouble(&conversionSuccessful)};
-        if (conversionSuccessful) {
-            floatingPointNumbers.append(curNum);
-            inputBuffer = "";
-        }
-        else {
-            calcError("Widget::operatorButtonClicked => Number Conversion Failure");
-        }
+    Widget::CastDouble castNum {qStringToDouble(inputBuffer)};
+    if (castNum.safe) {
+        floatingPointNumbers.append(castNum.num);
+        inputBuffer = "";
     }
     else {
-        int curNum {inputBuffer.toInt(&conversionSuccessful)};
-        if (conversionSuccessful) {
-            // Add new number to QList
-            wholeNumbers.append(curNum);
-            // Clear Input Buffer and set result text to operator on UI
-            inputBuffer = "";
-        }
-        else {
-            calcError("Widget::operatorButtonClicked => Number Conversion Failure");
-        }
+        calcError("Widget::operatorButtonClicked => Number Conversion Failure");
     }
-    if (floatingPointValuesIncluded) {
-        // Check if any numbers were input before the floating point value
-        QList<double> targetNumbers;
-        if (wholeNumbers.size() > 0) {
-            for (int i {0}; i < wholeNumbers.size(); ++i) {
-                double newNum {1.0 * wholeNumbers[i]};
-                targetNumbers.append(newNum);
-            }
-            for (int i {0}; i < floatingPointNumbers.size(); ++i) {
-                targetNumbers.append(floatingPointNumbers[i]);
-            }
-        }
-        else {
-            targetNumbers = floatingPointNumbers;
-        }
-        // Validate all input
-        if (targetNumbers.size() == (operations.size() + 1)) {
-            // Process equation
-            double finalAnswer {0.0};
-            QList<int> priorityOperations;
-            QList<double> priorityResults;
-            if (operations.indexOf('/') != -1 || operations.indexOf('*') != -1) {
-                for (int i {0}; i < operations.length(); ++i) {
-                    if ((operations[i] == '/' || operations[i] == '*')) {
-                        priorityOperations.append(i);
-                    }
+    // Validate all input
+    if (floatingPointNumbers.size() == (operations.size() + 1)) {
+        // Process equation
+        double finalAnswer {0.0};
+        QList<int> priorityOperations;
+        QList<double> priorityResults;
+        if (operations.indexOf('/') != -1 || operations.indexOf('*') != -1) {
+            for (int i {0}; i < operations.length(); ++i) {
+                if ((operations[i] == '/' || operations[i] == '*')) {
+                    priorityOperations.append(i);
                 }
             }
-            // Process Priority Calculations
+        }
+        // Process Priority Calculations
+        for (int i {0}; i < priorityOperations.length(); ++i) {
+            int opIndex {priorityOperations[i]};
+            char operation {operations[opIndex]};
+            // 1 + 2 - 3 * 5
+            // [1 2 3 5]
+            // [+ - *]
+            // 0+ == (0, 1)
+            // 1- == (1, 2)
+            // 2* == (2, 3)
+            // FirstNum == (opIndex * 2)
+            // SecondNum == (FirstNum + 1)
+            double firstNum {floatingPointNumbers[opIndex]};
+            double secNum {floatingPointNumbers[(opIndex + 1)]};
+            if (DEBUG) {
+                qDebug() << "Processing Priority: " << firstNum << " " << operation << " " << secNum;
+            }
+            switch (operation) {
+                case '*':
+                    priorityResults.append(firstNum * secNum);
+                    if (DEBUG) {
+                        qDebug() << "Evaluated to: " << (firstNum * secNum);
+                    }
+                    break;
+                case '/':
+                    priorityResults.append(firstNum / secNum);
+                    if (DEBUG) {
+                        qDebug() << "Evaluated to: " << (firstNum / secNum);
+                    }
+                    break;
+            }
+        }
+        if (DEBUG) {
+            qDebug() << "Identified the following priority operations by index!";
             for (int i {0}; i < priorityOperations.length(); ++i) {
-                int opIndex {priorityOperations[i]};
-                char operation {operations[opIndex]};
-                // 1 + 2 - 3 * 5
+                qDebug() << priorityOperations[i];
+            }
+        }
+        // Process Remaining Calculations checking for priority operators and subbing in the result as secNum
+        for (int i {0}; i < operations.length(); ++i) {
+            if (DEBUG) {
+                qDebug() << "****************************** Op " << i << " *******************************";
+            }
+            if (priorityOperations.indexOf(i) != -1 && i == 0) {
+                if (DEBUG) {
+                    qDebug() << "This is Priority! Prior to evaluation, finalAns == " << finalAnswer << " Going to add " << priorityResults[priorityOperations.indexOf(i)];
+                }
+                // This is a priority operation
+                // Only addition or subtraction so process equation (pos or neg) and add to entire answer
+                finalAnswer += priorityResults[priorityOperations.indexOf(i)];
+                if (DEBUG) {
+                    qDebug() << "PRIORITY FIRST: Post-Eval, finalAns == " << finalAnswer;
+                }
+            }
+            else if (priorityOperations.indexOf((i + 1)) != -1) {
+                if (i == 0) {
+                    finalAnswer += floatingPointNumbers[0];
+                }
+                // Next Operation is priority
+                char operation {operations[i]};
+                double secondNum {priorityResults[priorityOperations.indexOf(i + 1)]};
+                switch (operation) {
+                    case '+':
+                        finalAnswer += secondNum;
+                        break;
+                    case '-':
+                        finalAnswer -= secondNum;
+                        break;
+                }
+            }
+            else if (priorityOperations.indexOf(i) == -1) {
+                if (i == 0) {
+                    if (DEBUG) {
+                        qDebug() << "This is first operation so finalAnswer will be: " << floatingPointNumbers[0];
+                    }
+                    finalAnswer += floatingPointNumbers[0];
+                }
+                // Process Operation normally
+                char operation {operations[i]};
+                // 1 + 2 - (3 * 5)
                 // [1 2 3 5]
                 // [+ - *]
-                // 0+ == (0, 1)
-                // 1- == (1, 2)
-                // 2* == (2, 3)
-                // FirstNum == (opIndex * 2)
-                // SecondNum == (FirstNum + 1)
-                double firstNum {targetNumbers[opIndex]};
-                double secNum {targetNumbers[(opIndex + 1)]};
+                // 0+ == (1)
+                // 1- == (2)
+                // 2* == (3)
+                double secondNum {floatingPointNumbers[(i + 1)]};
                 if (DEBUG) {
-                    qDebug() << "Processing Priority: " << firstNum << " " << operation << " " << secNum;
+                    qDebug() << "NO UPCOMING PRIORITY!: Going to process as follows: " << finalAnswer << " " << operation << " " << secondNum;
                 }
                 switch (operation) {
-                    case '*':
-                        priorityResults.append(firstNum * secNum);
-                        if (DEBUG) {
-                            qDebug() << "Evaluated to: " << (firstNum * secNum);
-                        }
+                    case '+':
+                        finalAnswer += secondNum;
                         break;
-                    case '/':
-                        priorityResults.append(firstNum / secNum);
-                        if (DEBUG) {
-                            qDebug() << "Evaluated to: " << (firstNum / secNum);
-                        }
+                    case '-':
+                        finalAnswer -= secondNum;
                         break;
                 }
             }
-            if (DEBUG) {
-                qDebug() << "Identified the following priority operations by index!";
-                for (int i {0}; i < priorityOperations.length(); ++i) {
-                    qDebug() << priorityOperations[i];
-                }
-            }
-            // Process Remaining Calculations checking for priority operators and subbing in the result as secNum
-            for (int i {0}; i < operations.length(); ++i) {
-                if (DEBUG) {
-                    qDebug() << "****************************** Op " << i << " *******************************";
-                }
-                if (priorityOperations.indexOf(i) != -1 && i == 0) {
-                    if (DEBUG) {
-                        qDebug() << "This is Priority! Prior to evaluation, finalAns == " << finalAnswer << " Going to add " << priorityResults[priorityOperations.indexOf(i)];
-                    }
-                    // This is a priority operation
-                    // Only addition or subtraction so process equation (pos or neg) and add to entire answer
-                    finalAnswer += priorityResults[priorityOperations.indexOf(i)];
-                    if (DEBUG) {
-                        qDebug() << "PRIORITY FIRST: Post-Eval, finalAns == " << finalAnswer;
-                    }
-                }
-                else if (priorityOperations.indexOf((i + 1)) != -1) {
-                    if (i == 0) {
-                        finalAnswer += targetNumbers[0];
-                    }
-                    // Next Operation is priority
-                    char operation {operations[i]};
-                    double secondNum {priorityResults[priorityOperations.indexOf(i + 1)]};
-                    switch (operation) {
-                        case '+':
-                            finalAnswer += secondNum;
-                            break;
-                        case '-':
-                            finalAnswer -= secondNum;
-                            break;
-                    }
-                }
-                else if (priorityOperations.indexOf(i) == -1) {
-                    if (i == 0) {
-                        if (DEBUG) {
-                            qDebug() << "This is first operation so finalAnswer will be: " << targetNumbers[0];
-                        }
-                        finalAnswer += targetNumbers[0];
-                    }
-                    // Process Operation normally
-                    char operation {operations[i]};
-                    // 1 + 2 - (3 * 5)
-                    // [1 2 3 5]
-                    // [+ - *]
-                    // 0+ == (1)
-                    // 1- == (2)
-                    // 2* == (3)
-                    double secondNum {targetNumbers[(i + 1)]};
-                    if (DEBUG) {
-                        qDebug() << "NO UPCOMING PRIORITY!: Going to process as follows: " << finalAnswer << " " << operation << " " << secondNum;
-                    }
-                    switch (operation) {
-                        case '+':
-                            finalAnswer += secondNum;
-                            break;
-                        case '-':
-                            finalAnswer -= secondNum;
-                            break;
-                    }
-                }
-            }
-            // Update result on UI
-            this->ui->result->setText(QString::number(finalAnswer));
         }
-        else {
-            qDebug() << "Floating Point Numbers Received: " << targetNumbers.length();
-            qDebug() << "Operators Received: " << operations.length();
-            calcError("Widget::calcButtonClicked => Floating Point Number to operator ratio mismatch");
-        }
+        // Update result on UI
+        inputBuffer = QString::number(finalAnswer);
+        updateUI();
     }
     else {
-        // Validate all input
-        if (wholeNumbers.size() == (operations.size() + 1)) {
-            // Process Equation
-            int finalAnswer {0};
-            // Need to consider OOP Here
-            // Check if any Multiplication or Division occurs
-            QList<int> priorityOperations;
-            QList<int> priorityResults;
-            if (operations.indexOf('/') != -1 || operations.indexOf('*') != -1) {
-                for (int i {0}; i < operations.length(); ++i) {
-                    if ((operations[i] == '/' || operations[i] == '*')) {
-                        priorityOperations.append(i);
-                    }
-                }
-            }
-
-            // 8 + 6 * 2 == 20 but we printed 24
-
-
-            // Process Priority Calculations
-            for (int i {0}; i < priorityOperations.length(); ++i) {
-                int opIndex {priorityOperations[i]};
-                char operation {operations[opIndex]};
-                // 1 + 2 - 3 * 5
-                // [1 2 3 5]
-                // [+ - *]
-                // 0+ == (0, 1)
-                // 1- == (1, 2)
-                // 2* == (2, 3)
-                // FirstNum == (opIndex * 2)
-                // SecondNum == (FirstNum + 1)
-                int firstNum {wholeNumbers[opIndex]};
-                int secNum {wholeNumbers[(opIndex + 1)]};
-                if (DEBUG) {
-                    qDebug() << "Processing Priority: " << firstNum << " " << operation << " " << secNum;
-                }
-                switch (operation) {
-                    case '*':
-                        priorityResults.append(firstNum * secNum);
-                        if (DEBUG) {
-                            qDebug() << "Evaluated to: " << (firstNum * secNum);
-                        }
-                        break;
-                    case '/':
-                        priorityResults.append(firstNum / secNum);
-                        if (DEBUG) {
-                            qDebug() << "Evaluated to: " << (firstNum / secNum);
-                        }
-                        break;
-                }
-            }
-            if (DEBUG) {
-                qDebug() << "Identified the following priority operations by index!";
-                for (int i {0}; i < priorityOperations.length(); ++i) {
-                    qDebug() << priorityOperations[i];
-                }
-            }
-            // Process Remaining Calculations checking for priority operators and subbing in the result as secNum
-            for (int i {0}; i < operations.length(); ++i) {
-                if (DEBUG) {
-                    qDebug() << "****************************** Op " << i << " *******************************";
-                }
-                if (priorityOperations.indexOf(i) != -1 && i == 0) {
-                    if (DEBUG) {
-                        qDebug() << "This is Priority! Prior to evaluation, finalAns == " << finalAnswer << " Going to add " << priorityResults[priorityOperations.indexOf(i)];
-                    }
-                    // This is a priority operation
-                    // Only addition or subtraction so process equation (pos or neg) and add to entire answer
-                    finalAnswer += priorityResults[priorityOperations.indexOf(i)];
-                    if (DEBUG) {
-                        qDebug() << "PRIORITY FIRST: Post-Eval, finalAns == " << finalAnswer;
-                    }
-                }
-                else if (priorityOperations.indexOf((i + 1)) != -1) {
-                    if (i == 0) {
-                        finalAnswer += wholeNumbers[0];
-                    }
-                    // Next Operation is priority
-                    char operation {operations[i]};
-                    int secondNum {priorityResults[priorityOperations.indexOf(i + 1)]};
-                    switch (operation) {
-                        case '+':
-                            finalAnswer += secondNum;
-                            break;
-                        case '-':
-                            finalAnswer -= secondNum;
-                            break;
-                    }
-                }
-                else if (priorityOperations.indexOf(i) == -1) {
-                    if (i == 0) {
-                        if (DEBUG) {
-                            qDebug() << "This is first operation so finalAnswer will be: " << wholeNumbers[0];
-                        }
-                        finalAnswer += wholeNumbers[0];
-                    }
-                    // Process Operation normally
-                    char operation {operations[i]};
-                    // 1 + 2 - (3 * 5)
-                    // [1 2 3 5]
-                    // [+ - *]
-                    // 0+ == (1)
-                    // 1- == (2)
-                    // 2* == (3)
-                    int secondNum {wholeNumbers[(i + 1)]};
-                    if (DEBUG) {
-                        qDebug() << "NO UPCOMING PRIORITY!: Going to process as follows: " << finalAnswer << " " << operation << " " << secondNum;
-                    }
-                    switch (operation) {
-                        case '+':
-                            finalAnswer += secondNum;
-                            break;
-                        case '-':
-                            finalAnswer -= secondNum;
-                            break;
-                    }
-                }
-            }
-            // Update result on UI
-            this->ui->result->setText(QString::number(finalAnswer));
-        }
-        else {
-            qDebug() << "Whole Numbers Received: " << wholeNumbers.length();
-            qDebug() << "Operators Received: " << operations.length();
-            calcError("Widget::calcButtonClicked => Whole Number to operator ratio mismatch");
-        }
-     }
+        qDebug() << "Floating Point Numbers Received: " << floatingPointNumbers.length();
+        qDebug() << "Operators Received: " << operations.length();
+        calcError("Widget::calcButtonClicked => Floating Point Number to operator ratio mismatch");
+    }
     // Clear all QLists
     clearCache();
 }
