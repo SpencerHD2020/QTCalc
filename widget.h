@@ -2,10 +2,8 @@
 #define WIDGET_H
 
 #include <QWidget>
-#include <QWidget>
 #include <QLabel>
 #include <QPushButton>
-#include <QButtonGroup>
 #include <QDebug>
 #include <QList>
 
