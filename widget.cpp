@@ -275,6 +275,7 @@ void Widget::calcButtonClicked() {
             }
         }
         // Update result on UI
+        clearCache();
         inputBuffer = QString::number(finalAnswer);
         updateUI();
     }
@@ -283,6 +284,4 @@ void Widget::calcButtonClicked() {
         qDebug() << "Operators Received: " << operations.length();
         calcError("Widget::calcButtonClicked => Floating Point Number to operator ratio mismatch");
     }
-    // Clear all QLists
-    clearCache();
 }
